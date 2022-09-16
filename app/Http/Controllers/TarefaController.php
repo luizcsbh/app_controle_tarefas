@@ -2,9 +2,12 @@
 
 namespace App\Http\Controllers;
 
+
+use App\Mail\NovaTarefaMail;
 use App\Models\Tarefa;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 
 class TarefaController extends Controller
 {
@@ -20,30 +23,9 @@ class TarefaController extends Controller
      */
     public function index()
     {
-        
-        $id = Auth::user()->id;
-        $name = Auth::user()->name;
-        $email = Auth::user()->email;
-        return "ID: $id | Nome: $name | E-mail: $email";
-        /*
-        if(Auth::check()) {
-            $id = Auth::user()->id;
-            $name = Auth::user()->name;
-            $email = Auth::user()->email;
-            return "ID: $id | Nome: $name | E-mail: $email";
-        } else {
-            return 'Você não está logado no Sistema';
-        }
-       
-        if(auth()->check()) {
-            $id = auth()->user()->id;
-            $name = auth()->user()->name;
-            $email = auth()->user()->email;
-            return "ID: $id | Nome: $name | E-mail: $email";
-        } else {
-            return 'Você não está logado no Sistema';
-        }
-        */
+        $user_id = auth()->user()->id;
+        $tarefas = Tarefa::where('user_id', $user_id)->paginate(10);
+        return view('tarefa.index',['tarefas' => $tarefas]);
     }
 
     /**
@@ -53,7 +35,7 @@ class TarefaController extends Controller
      */
     public function create()
     {
-        //
+        return view('tarefa.create');
     }
 
     /**
@@ -64,7 +46,30 @@ class TarefaController extends Controller
      */
     public function store(Request $request)
     {
-        //
+        $msg ='';
+
+        $dados = $request->all('tarefa', 'data_limite_conclusao');
+        $dados['user_id'] = auth()->user()->id;
+
+        $rules=[
+            'tarefa'                 => 'required|min:3|max:20',
+            'data_limite_conclusao'  => 'required|date'
+        ];
+        $feedbacks = [
+            'required'              => 'O campo :attribute deve ser preenchido',
+            'tarefa.min'            => 'O campo tarefa deve ter no mínimo 3 caracteres',
+            'tarefa.max'            => 'O campo tarefa deve ter no máximo 40 caracteres',
+            'data_limite_conclusao' => 'O campo deve ser do tipo data'
+        ];
+
+        $request->validate($rules, $feedbacks);
+
+        $tarefa = Tarefa::create($dados);
+        $destinatario = auth()->user()->email;
+        Mail::to($destinatario)->send(new NovaTarefaMail($tarefa));
+        $msg = 'Tarefa cadastrada com sucesso';
+
+        return redirect()->route('tarefa.show', ['tarefa' => $tarefa->id]);
     }
 
     /**
@@ -75,7 +80,7 @@ class TarefaController extends Controller
      */
     public function show(Tarefa $tarefa)
     {
-        //
+        return view('tarefa.show', ['tarefa' => $tarefa]);
     }
 
     /**
@@ -86,7 +91,13 @@ class TarefaController extends Controller
      */
     public function edit(Tarefa $tarefa)
     {
-        //
+        $user_id = auth()->user()->id;
+        
+        if($tarefa->user_id == $user_id) {
+            return view('tarefa.edit', ['tarefa' => $tarefa]);
+        }
+
+        return view('acesso-negado');
     }
 
     /**
@@ -98,7 +109,27 @@ class TarefaController extends Controller
      */
     public function update(Request $request, Tarefa $tarefa)
     {
-        //
+        if(!$tarefa->user_id == auth()->user()->id) {
+            return view('acesso-negado');
+        }
+        
+        $dados = $request->all('tarefa', 'data_limite_conclusao');
+
+        $rules=[
+            'tarefa'                 => 'required|min:3|max:20',
+            'data_limite_conclusao'  => 'required|date'
+        ];
+        $feedbacks = [
+            'required'              => 'O campo :attribute deve ser preenchido',
+            'tarefa.min'            => 'O campo tarefa deve ter no mínimo 3 caracteres',
+            'tarefa.max'            => 'O campo tarefa deve ter no máximo 40 caracteres',
+            'data_limite_conclusao' => 'O campo deve ser do tipo data'
+        ];
+
+        $request->validate($rules, $feedbacks);
+
+        $tarefa->update($dados);
+        return redirect()->route('tarefa.show', ['tarefa' => $tarefa->id]);
     }
 
     /**
@@ -109,6 +140,11 @@ class TarefaController extends Controller
      */
     public function destroy(Tarefa $tarefa)
     {
-        //
+        if(!$tarefa->user_id == auth()->user()->id) {
+            return view('acesso-negado');
+        }
+
+        $tarefa->delete();
+        return redirect()->route('tarefa.index');
     }
 }
